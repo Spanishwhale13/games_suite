@@ -26,12 +26,14 @@ body::after{content:'';position:fixed;inset:0;background-image:repeating-linear-
 .header .subtitle{font-size:0.75rem;color:var(--text-muted);letter-spacing:0.25em;text-transform:uppercase;margin-top:0.2rem;}
 
 /* Trainer toggles bar */
-.trainer-bar{width:100%;max-width:900px;display:flex;gap:10px;padding:0.6rem 1rem;flex-wrap:wrap;align-items:center;}
+.trainer-bar{width:100%;max-width:900px;display:flex;gap:8px;padding:0.5rem 1rem 0.3rem;flex-wrap:wrap;align-items:center;}
 .trainer-label{font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--text-muted);flex-shrink:0;}
 .toggle-btn{font-family:'Cinzel',serif;font-size:0.62rem;letter-spacing:0.12em;text-transform:uppercase;padding:0.3rem 0.75rem;border-radius:20px;border:1px solid rgba(201,168,76,0.3);background:rgba(0,0,0,0.3);color:var(--text-muted);cursor:pointer;transition:all 0.2s;}
 .toggle-btn.on{background:rgba(201,168,76,0.15);border-color:var(--gold);color:var(--gold-light);}
 .toggle-btn:hover{border-color:var(--gold);color:var(--gold-light);}
-.count-display{margin-left:auto;display:flex;align-items:center;gap:10px;}
+/* Count display lives on its own row below the toggle buttons */
+.count-display{width:100%;max-width:900px;display:none;align-items:center;gap:12px;padding:0.3rem 1rem 0.4rem;background:rgba(0,0,0,0.25);border-bottom:1px solid rgba(201,168,76,0.1);}
+.count-display.visible{display:flex;}
 .count-box{font-family:'Cinzel',serif;font-size:0.65rem;letter-spacing:0.1em;text-align:center;}
 .count-box .cv{font-size:1.1rem;line-height:1;margin-top:2px;}
 .count-box .cv.pos{color:#7fff7f;}
@@ -195,17 +197,18 @@ body::after{content:'';position:fixed;inset:0;background-image:repeating-linear-
   <span class="trainer-label">Trainer:</span>
   <button class="toggle-btn" id="toggle-count" onclick="toggleSetting('showCount')">Count: OFF</button>
   <button class="toggle-btn" id="toggle-ev"    onclick="toggleSetting('showEV')">EV: OFF</button>
-  <div class="count-display" id="count-display" style="display:none;">
-    <div class="count-box" id="count-box-rc">
-      <div class="cv neu" id="cv-rc">0</div>
-      <div class="cl">Running</div>
-    </div>
-    <div class="count-box" id="count-box-tc">
-      <div class="cv neu" id="cv-tc">0.0</div>
-      <div class="cl">True</div>
-    </div>
-    <span class="count-advice neutral" id="count-advice">Neutral</span>
+</div>
+<!-- Count display — own row, only shown when count is ON -->
+<div class="count-display" id="count-display">
+  <div class="count-box">
+    <div class="cv neu" id="cv-rc">0</div>
+    <div class="cl">Running</div>
   </div>
+  <div class="count-box">
+    <div class="cv neu" id="cv-tc">0.0</div>
+    <div class="cl">True</div>
+  </div>
+  <span class="count-advice neutral" id="count-advice">Neutral</span>
 </div>
 
 <!-- Number of hands selector -->
@@ -264,6 +267,7 @@ body::after{content:'';position:fixed;inset:0;background-image:repeating-linear-
 <div class="side-row">
   <button class="btn sm" onclick="clearBet()">Clear Bet</button>
   <button class="btn sm" onclick="repeatBet()">Repeat Bet</button>
+  <button class="btn sm" id="btn-autobet" onclick="toggleAutobet()">Auto: OFF</button>
   <button class="btn sm danger" onclick="resetGame()">New Game</button>
 </div>
 
@@ -299,7 +303,7 @@ function toggleSetting(key) {
     const btn = $('toggle-count');
     btn.textContent = 'Count: ' + (settings.showCount ? 'ON' : 'OFF');
     btn.className = 'toggle-btn' + (settings.showCount ? ' on' : '');
-    $('count-display').style.display = settings.showCount ? 'flex' : 'none';
+    $('count-display').className = settings.showCount ? 'count-display visible' : 'count-display';
     updateCountDisplay();
   }
   if (key === 'showEV') {
@@ -316,19 +320,19 @@ function toggleSetting(key) {
 let G = {
   balance: 500,
   numHands: 1,
-  bettingSpot: 0,       // which spot is being bet (0-indexed)
-  spots: [],            // array of spot objects
+  bettingSpot: 0,
+  spots: [],
   dealerHand: [],
   deck: [],
-  phase: 'betting',     // betting | playing | done
-  currentSpot: 0,       // which spot is currently playing
+  phase: 'betting',
+  currentSpot: 0,
   stats: { hands:0, wins:0, losses:0, pushes:0 },
   history: [],
   lastBets: [],
-  // Hi-Lo counting
   runningCount: 0,
   decksDealt: 0,
   cardsDealt: 0,
+  autobet: false,
 };
 
 function makeSpot(index) {
@@ -625,7 +629,7 @@ function clearBet() {
 }
 function repeatBet() {
   if (G.phase !== 'betting') return;
-  if (!G.lastBets || !G.lastBets.length) return;
+  if (!G.lastBets || !G.lastBets.length || !G.lastBets.some(b=>b>0)) return;
   G.spots.forEach(sp => { G.balance += sp.bet; sp.bet = 0; });
   G.lastBets.forEach((lb, i) => {
     if (i < G.spots.length) {
@@ -636,6 +640,14 @@ function repeatBet() {
   });
   renderAllSpots();
   updateUI();
+  // Auto-deal after a short pause
+  setTimeout(() => deal(), 300);
+}
+function toggleAutobet() {
+  G.autobet = !G.autobet;
+  const btn = $('btn-autobet');
+  btn.textContent = G.autobet ? 'Auto: ON' : 'Auto: OFF';
+  btn.className = 'btn sm' + (G.autobet ? ' primary' : '');
 }
 function selectBettingSpot(idx) {
   if (G.phase !== 'betting') return;
@@ -678,6 +690,15 @@ function deal() {
   renderDealerCards();
   updateScores();
   updateCountDisplay();
+
+  // Check dealer blackjack first (peek)
+  const dealerBJNow = isBlackjack([G.dealerHand[0], G.dealerHand[1]]);
+  if (dealerBJNow) {
+    // Reveal hole card immediately, then settle
+    showMsg('Dealer has Blackjack!', 'lose');
+    setTimeout(() => revealDealerAndSettle(), 700);
+    return;
+  }
 
   // Check for player blackjacks
   const sp = currentSpotObj();
@@ -881,8 +902,24 @@ function prepareNextHand() {
   initSpots();
   renderDealerCards(); renderAllSpots(); updateScores(); updateActionButtons(); updateUI();
   if (G.balance <= 0) {
+    G.autobet = false;
+    const btn = $('btn-autobet');
+    if (btn) { btn.textContent = 'Auto: OFF'; btn.className = 'btn sm'; }
     showMsg('Out of chips — game reset!','');
     G.balance = 500; updateUI();
+    return;
+  }
+  // Autobet: restore last bets and deal automatically
+  if (G.autobet && G.lastBets && G.lastBets.some(b=>b>0)) {
+    G.lastBets.forEach((lb, i) => {
+      if (i < G.spots.length) {
+        const amt = Math.min(lb, G.balance);
+        G.spots[i].bet = amt;
+        G.balance -= amt;
+      }
+    });
+    renderAllSpots(); updateUI();
+    setTimeout(() => deal(), 600);
   } else {
     showMsg('Place your bets','');
   }
@@ -1062,8 +1099,10 @@ function showMsg(text, type) {
 }
 
 function resetGame() {
-  G = { ...G, balance:500, phase:'betting', dealerHand:[], stats:{hands:0,wins:0,losses:0,pushes:0}, history:[], lastBets:[], runningCount:0, cardsDealt:0 };
+  G = { ...G, balance:500, phase:'betting', dealerHand:[], stats:{hands:0,wins:0,losses:0,pushes:0}, history:[], lastBets:[], runningCount:0, cardsDealt:0, autobet:false };
   G.deck = buildDeck();
+  const abBtn = $('btn-autobet');
+  if (abBtn) { abBtn.textContent = 'Auto: OFF'; abBtn.className = 'btn sm'; }
   initSpots();
   renderDealerCards(); renderAllSpots(); updateScores(); updateActionButtons(); updateUI();
   updateCountDisplay();
