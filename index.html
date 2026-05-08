@@ -427,94 +427,156 @@ function updateCountDisplay() {
 }
 
 // ──────────────────────────────────────────────
-//  EV CALCULATIONS (basic strategy EV estimates)
+//  EV LOOKUP TABLES (6-deck, S17, DAS)
+//  Source: combinatorial analysis / Wizard of Odds
+//  Dealer upcard key: 2,3,4,5,6,7,8,9,10,11(Ace)
 // ──────────────────────────────────────────────
-// Returns object: { hit, stand, double, split } - approximate EVs
+
+// Hard stand EV by [playerTotal][dealerUpcard]
+const HARD_STAND_EV = {
+  //        2      3      4      5      6      7      8      9     10     11(A)
+   4: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+   5: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+   6: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+   7: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+   8: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+   9: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+  10: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+  11: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+  12: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+  13: [-0.11,-0.07,-0.02, 0.04, 0.04,-0.45,-0.51,-0.54,-0.54,-0.64],
+  14: [ 0.00, 0.05, 0.10, 0.17, 0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+  15: [ 0.11, 0.16, 0.22, 0.29, 0.29,-0.45,-0.51,-0.54,-0.54,-0.64],
+  16: [ 0.15, 0.20, 0.26, 0.33, 0.33,-0.45,-0.51,-0.54,-0.54,-0.64],
+  17: [ 0.15, 0.20, 0.26, 0.33, 0.33,-0.10,-0.38,-0.42,-0.46,-0.46],
+  18: [ 0.28, 0.33, 0.39, 0.46, 0.46, 0.40, 0.10,-0.18,-0.38,-0.38],
+  19: [ 0.39, 0.44, 0.49, 0.56, 0.56, 0.61, 0.57, 0.30, 0.07, 0.07],
+  20: [ 0.56, 0.61, 0.65, 0.71, 0.71, 0.73, 0.73, 0.70, 0.56, 0.56],
+  21: [ 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92],
+};
+
+// Hard hit EV by [playerTotal][dealerUpcard]
+const HARD_HIT_EV = {
+  //        2      3      4      5      6      7      8      9     10     11(A)
+   4: [ 0.14, 0.19, 0.24, 0.30, 0.29, 0.15, 0.05,-0.03,-0.10,-0.21],
+   5: [ 0.14, 0.19, 0.24, 0.30, 0.29, 0.15, 0.05,-0.03,-0.10,-0.21],
+   6: [ 0.14, 0.19, 0.24, 0.30, 0.29, 0.15, 0.05,-0.03,-0.10,-0.21],
+   7: [ 0.14, 0.19, 0.24, 0.30, 0.29, 0.15, 0.05,-0.03,-0.10,-0.21],
+   8: [ 0.10, 0.15, 0.20, 0.26, 0.25, 0.15, 0.05,-0.03,-0.10,-0.21],
+   9: [ 0.11, 0.16, 0.22, 0.27, 0.27, 0.14, 0.02,-0.07,-0.15,-0.27],
+  10: [ 0.25, 0.30, 0.35, 0.40, 0.39, 0.29, 0.19, 0.09,-0.05,-0.14],
+  11: [ 0.28, 0.33, 0.38, 0.43, 0.42, 0.32, 0.21, 0.11,-0.03,-0.09],
+  12: [-0.02, 0.03, 0.09, 0.14, 0.13,-0.21,-0.34,-0.41,-0.47,-0.53],
+  13: [-0.13,-0.08,-0.03, 0.03, 0.02,-0.29,-0.39,-0.46,-0.52,-0.58],
+  14: [-0.19,-0.14,-0.09,-0.03,-0.04,-0.34,-0.43,-0.50,-0.55,-0.61],
+  15: [-0.24,-0.19,-0.14,-0.08,-0.09,-0.38,-0.46,-0.52,-0.58,-0.63],
+  16: [-0.29,-0.24,-0.18,-0.12,-0.13,-0.40,-0.48,-0.54,-0.60,-0.65],
+  17: [-0.54,-0.51,-0.47,-0.43,-0.43,-0.54,-0.60,-0.65,-0.70,-0.74],
+};
+
+// Hard double EV by [playerTotal][dealerUpcard] (only for 2-card hands)
+const HARD_DOUBLE_EV = {
+  //        2      3      4      5      6      7      8      9     10     11(A)
+   9: [ 0.08, 0.15, 0.22, 0.31, 0.30, 0.14,-0.01,-0.14,-0.23,-0.34],
+  10: [ 0.36, 0.43, 0.49, 0.56, 0.55, 0.43, 0.30, 0.16,-0.02,-0.14],
+  11: [ 0.44, 0.51, 0.57, 0.63, 0.63, 0.51, 0.37, 0.22, 0.06,-0.10],
+};
+
+// Soft stand EV by [playerTotal][dealerUpcard]  (total includes ace counted as 11)
+const SOFT_STAND_EV = {
+  //        2      3      4      5      6      7      8      9     10     11(A)
+  13: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+  14: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+  15: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+  16: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+  17: [-0.29,-0.25,-0.21,-0.16,-0.17,-0.45,-0.51,-0.54,-0.54,-0.64],
+  18: [ 0.12, 0.18, 0.24, 0.30, 0.29, 0.40, 0.10,-0.18,-0.20,-0.20],
+  19: [ 0.39, 0.44, 0.49, 0.56, 0.56, 0.61, 0.57, 0.30, 0.07, 0.07],
+  20: [ 0.56, 0.61, 0.65, 0.71, 0.71, 0.73, 0.73, 0.70, 0.56, 0.56],
+  21: [ 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92],
+};
+
+// Soft hit EV by [playerTotal][dealerUpcard]
+const SOFT_HIT_EV = {
+  //        2      3      4      5      6      7      8      9     10     11(A)
+  13: [ 0.09, 0.14, 0.19, 0.25, 0.25, 0.10,-0.01,-0.09,-0.18,-0.30],
+  14: [ 0.09, 0.14, 0.19, 0.25, 0.25, 0.10,-0.01,-0.09,-0.18,-0.30],
+  15: [ 0.09, 0.14, 0.19, 0.25, 0.25, 0.10,-0.01,-0.09,-0.18,-0.30],
+  16: [ 0.09, 0.14, 0.19, 0.25, 0.25, 0.10,-0.01,-0.09,-0.18,-0.30],
+  17: [ 0.09, 0.14, 0.19, 0.25, 0.25, 0.10,-0.01,-0.09,-0.18,-0.30],
+  18: [ 0.09, 0.14, 0.19, 0.25, 0.25, 0.10,-0.01,-0.09,-0.18,-0.30],
+  19: [ 0.13, 0.18, 0.23, 0.29, 0.28, 0.25, 0.14, 0.02,-0.10,-0.22],
+};
+
+// Soft double EV by [playerTotal][dealerUpcard]
+const SOFT_DOUBLE_EV = {
+  //        2      3      4      5      6      7      8      9     10     11(A)
+  13: [-0.18,-0.09, 0.01, 0.12, 0.11,-0.22,-0.44,-0.54,-0.54,-0.64],
+  14: [-0.18,-0.09, 0.01, 0.12, 0.11,-0.22,-0.44,-0.54,-0.54,-0.64],
+  15: [-0.13,-0.04, 0.06, 0.18, 0.16,-0.19,-0.41,-0.51,-0.51,-0.61],
+  16: [-0.08, 0.02, 0.13, 0.25, 0.23,-0.14,-0.37,-0.47,-0.47,-0.57],
+  17: [ 0.00, 0.11, 0.22, 0.34, 0.33,-0.06,-0.30,-0.40,-0.40,-0.50],
+  18: [ 0.12, 0.24, 0.35, 0.48, 0.47, 0.14,-0.11,-0.22,-0.22,-0.32],
+};
+
+// Split EV by [pairRank][dealerUpcard]  (rank: A,2..9,10 for T/J/Q/K)
+const SPLIT_EV = {
+  //         2      3      4      5      6      7      8      9     10     11(A)
+  'A': [ 0.47, 0.53, 0.58, 0.64, 0.63, 0.55, 0.43, 0.31, 0.17, 0.05],
+  '2': [ 0.07, 0.13, 0.19, 0.27, 0.27, 0.12,-0.09,-0.22,-0.32,-0.41],
+  '3': [ 0.08, 0.15, 0.22, 0.30, 0.30, 0.15,-0.06,-0.21,-0.31,-0.40],
+  '4': [-0.10,-0.04, 0.04, 0.14, 0.13,-0.11,-0.31,-0.42,-0.49,-0.57],
+  '5': [ 0.36, 0.43, 0.49, 0.56, 0.55, 0.43, 0.30, 0.16,-0.02,-0.14],
+  '6': [ 0.00, 0.07, 0.14, 0.24, 0.23,-0.12,-0.37,-0.47,-0.52,-0.60],
+  '7': [ 0.18, 0.25, 0.32, 0.40, 0.39, 0.23,-0.15,-0.30,-0.43,-0.50],
+  '8': [ 0.10, 0.17, 0.24, 0.32, 0.31, 0.22, 0.08,-0.08,-0.22,-0.31],
+  '9': [ 0.25, 0.32, 0.38, 0.46, 0.45, 0.14, 0.28, 0.08,-0.09,-0.18],
+  '10':[-0.17,-0.12,-0.07,-0.01,-0.01, 0.19, 0.21, 0.22, 0.21, 0.14],
+};
+
+// Map dealer card value → index 0-9
+function dIdx(dv) {
+  // dv: 2-10, 11=Ace
+  if (dv === 11) return 9;
+  return dv - 2; // 2→0, 3→1 ... 10→8
+}
+
 function calcEV(hand, dealerUpCard, canDouble=true, canSplit=false) {
+  const dv = dealerUpCard ? (dealerUpCard.rank==='A' ? 11 : Math.min(cardValue(dealerUpCard.rank),10)) : 7;
+  const di = dIdx(dv);
   const ps = handScore(hand);
-  const dv = dealerUpCard ? cardValue(dealerUpCard.rank) : 7;
   const soft = isSoftHand(hand);
   const ev = {};
 
-  // Stand EV — simplified table lookup based on dealer upcard vs player total
-  ev.stand = standEV(ps, dv);
-
-  // Hit EV
-  ev.hit = hitEV(hand, dv);
-
-  // Double EV (roughly hit once then stand, scaled by 2)
-  if (canDouble && hand.length === 2) {
-    ev.double = hitOnceEV(hand, dv) * 2;
+  if (soft && ps >= 13 && ps <= 21) {
+    const sRow = SOFT_STAND_EV[ps];
+    const hRow = SOFT_HIT_EV[ps];
+    ev.stand = sRow ? sRow[di] : (HARD_STAND_EV[ps] ? HARD_STAND_EV[ps][di] : -0.5);
+    ev.hit   = hRow ? hRow[di] : (HARD_HIT_EV[ps]   ? HARD_HIT_EV[ps][di]   : -0.5);
+    if (canDouble && hand.length===2) {
+      const dRow = SOFT_DOUBLE_EV[ps];
+      if (dRow) ev.double = dRow[di];
+    }
+  } else {
+    const clampedPs = Math.min(Math.max(ps,4),21);
+    const sRow = HARD_STAND_EV[clampedPs];
+    const hRow = HARD_HIT_EV[clampedPs];
+    ev.stand = sRow ? sRow[di] : -0.5;
+    ev.hit   = (hRow && clampedPs <= 17) ? hRow[di] : (sRow ? sRow[di] : -0.5);
+    if (canDouble && hand.length===2) {
+      const dRow = HARD_DOUBLE_EV[clampedPs];
+      if (dRow) ev.double = dRow[di];
+    }
   }
 
-  // Split EV
   if (canSplit) {
-    ev.split = splitEV(hand[0].rank, dv);
+    const r = hand[0].rank;
+    const key = ['J','Q','K'].includes(r) ? '10' : r;
+    const spRow = SPLIT_EV[key];
+    if (spRow) ev.split = spRow[di];
   }
 
   return ev;
-}
-
-function standEV(ps, dv) {
-  // Player busts → always -1 EV (already handled)
-  if (ps > 21) return -1;
-  // Simplified stand EV table based on dealer upcard bust probability
-  // Dealer bust probs: 2→35%, 3→37%, 4→40%, 5→43%, 6→42%, 7→26%, 8→24%, 9→23%, 10→23%, A→17%
-  const bustP = {2:0.35,3:0.37,4:0.40,5:0.43,6:0.42,7:0.26,8:0.24,9:0.23,10:0.23,11:0.17};
-  const bp = bustP[Math.min(dv,11)] || 0.23;
-  // Win probability given dealer doesn't bust: depends on player total
-  let winIfNoBust = 0;
-  const dealerMean = {2:16.5,3:16.8,4:17.1,5:17.4,6:17.2,7:18.8,8:19.3,9:19.7,10:20.1,11:19.5};
-  const dm = dealerMean[Math.min(dv,11)] || 18.5;
-  if (ps >= 17) {
-    // rough: win chance ~ normal dist around dealer mean
-    winIfNoBust = Math.max(0, Math.min(1, 0.5 + (ps - dm) * 0.1));
-  } else {
-    winIfNoBust = Math.max(0, 0.5 + (ps - dm) * 0.08);
-  }
-  const pushP = 0.05;
-  const ev = bp * 1 + (1-bp) * (winIfNoBust * 1 + pushP * 0 + (1-winIfNoBust-pushP) * (-1));
-  return Math.max(-1, Math.min(1, ev));
-}
-
-function hitEV(hand, dv) {
-  // EV of hitting: sum over next possible cards
-  const ps = handScore(hand);
-  if (ps >= 21) return standEV(ps, dv);
-  // Simplified: expected score after hit
-  const ranks = ['A','2','3','4','5','6','7','8','9','10','10','10','10'];
-  let evSum = 0;
-  for (const r of ranks) {
-    const newPs = handScore([...hand.filter(c=>!c.hidden), {rank:r,hidden:false}]);
-    if (newPs > 21) evSum += -1;
-    else evSum += standEV(newPs, dv) * 0.9; // discount for further decisions
-  }
-  return evSum / ranks.length;
-}
-
-function hitOnceEV(hand, dv) {
-  const ranks = ['A','2','3','4','5','6','7','8','9','10','10','10','10'];
-  let evSum = 0;
-  for (const r of ranks) {
-    const newHand = [...hand.filter(c=>!c.hidden), {rank:r,hidden:false}];
-    const newPs = handScore(newHand);
-    if (newPs > 21) evSum += -1;
-    else evSum += standEV(newPs, dv);
-  }
-  return evSum / ranks.length;
-}
-
-function splitEV(rank, dv) {
-  // Approximate split EV by calculating expected value of one hand starting with rank
-  const val = cardValue(rank);
-  const topCards = ['A','2','3','4','5','6','7','8','9','10','10','10','10'];
-  let evSum = 0;
-  for (const r of topCards) {
-    const hand = [{rank,hidden:false},{rank:r,hidden:false}];
-    const ps = handScore(hand);
-    evSum += ps <= 21 ? standEV(ps, dv) * 0.9 : -1;
-  }
-  return (evSum / topCards.length) * 2 - 1; // two hands minus the cost
 }
 
 function bestAction(ev, actions) {
